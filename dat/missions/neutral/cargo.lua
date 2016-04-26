@@ -36,6 +36,11 @@ Piracy Risk: %s]]
     full[1] = "No room in ship"
     full[2] = "You don't have enough cargo space to accept this mission. You need %d tons of free space (you need %d more)."
 
+	piracyrisk = {}
+	piracyrisk[1] = "None"
+	piracyrisk[2] = "Low"
+	piracyrisk[3] = "Medium"
+	piracyrisk[4] = "High"
    --=Landing=--
 
    cargo_land_title = "Delivery success!"
@@ -61,52 +66,35 @@ end
 function create()
     -- Note: this mission does not make any system claims. 
 
-    -- Calculate the route, distance, jumps and cargo to take
-    destplanet, destsys, numjumps, traveldist, cargo, tier = cargo_calculateRoute()
+    -- Calculate the route, distance, jumps, risk of piracy, and cargo to take
+    destplanet, destsys, numjumps, traveldist, cargo, avgrisk, tier = cargo_calculateRoute()
     
     if destplanet == nil then
        misn.finish(false)
     end
     
-    -- To determine risk of piracy, simulate a trip there and calculate pirates presence.
-    -- Assume shortest route with no interruptions.
-   jumps = system.jumpPath( system.cur(), destsys:name() )
-   risk = system.cur():presences()["Pirate"]
-   if risk == nil then risk = 0 end
-   if jumps then
-      for k, v in ipairs(jumps) do
-         travelrisk = v:system():presences()["Pirate"]
-         if travelrisk == nil then
-            travelrisk = 0
-         end
-         risk = risk+travelrisk
-      end
-   end
-   
-   -- Determines average piracy risk and how much pay is padded for delivery to high-piracy areas.
-    avgrisk = risk/(numjumps + 1)
-    
     if avgrisk == 0 then
-       piracyrisk = "None"
+       piracyrisk = piracyrisk[1]
        riskreward = 0
     elseif avgrisk <= 25 then
-       piracyrisk = "Low"
-       riskreward = 50
-    elseif avgrisk > 25 and avgrisk <= 75 then
-       piracyrisk = "Medium"
-       riskreward = 100
+       piracyrisk = piracyrisk[2]
+       riskreward = 10
+    elseif avgrisk > 25 and avgrisk <= 100 then
+       piracyrisk = piracyrisk[3]
+       riskreward = 25
     else
-       piracyrisk = "High"
-       riskreward = 150
+       piracyrisk = piracyrisk[4]
+       riskreward = 50
     end
-    
+       
     -- Choose amount of cargo and mission reward. This depends on the mission tier.
+    -- Reward depends on type of cargo hauled. Hauling expensive commodities gives a better deal.
     -- Note: Pay is independent from amount by design! Not all deals are equally attractive!
     finished_mod = 2.0 -- Modifier that should tend towards 1.0 as naev is finished as a game
     amount = rnd.rnd(5 + 25 * tier, 20 + 60 * tier)
-    jumpreward = 200
-    distreward = 0.09
-    reward = 1.5^tier * (avgrisk * riskreward + numjumps * jumpreward + traveldist * distreward) * finished_mod * (1. + 0.05*rnd.twosigma())
+    jumpreward = commodity.price(cargo)
+    distreward = math.log(100*commodity.price(cargo))/100
+    reward = 1.5^tier * (avgrisk*riskreward + numjumps * jumpreward + traveldist * distreward) * finished_mod * (1. + 0.05*rnd.twosigma())
     
     misn.setTitle(buildCargoMissionDescription( nil, amount, cargo, destplanet, destsys ))
     misn.markerAdd(destsys, "computer")
